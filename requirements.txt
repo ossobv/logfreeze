@@ -1,0 +1,10 @@
+# config prereqs
+toml
+# NOTE: in the future (Python 3.11+) we'll want tomllib
+
+# input prereqs
+nats-py
+
+# sink prereqs
+google-auth
+google-cloud
