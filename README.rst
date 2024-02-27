@@ -1,25 +1,38 @@
 logfreeze
 =========
 
-Functions, *to be defined.*
+*Function one:* **replicating a JetStream to remote storage (logfreeze).**
+
+For this, we will want a *durable ordered push consumer*:
+
+- *durable*, so we can stop and upload a batch, and then resume;
+
+- *ordered*, this greatly improves auditability -- proof that logs are not missing;
+
+- *push*, we subscribe to a specific subject (group).
+
+*Function two:* **filtering and distributing logs to designated JetStreams**
+
+For this, we could use horizontal scaling and we will use a *durable pull consumer*.
+
+- *durable*, as the tasks will run forever;
+
+- *pull* (and unordered) as we might want to use multiple jobs and do not need 100% ordering.
 
 
 ----
 TODO
 ----
 
-- pull_subscription offset? start at stream_id X. This seems not to be
-  implemented easily. One can use ``get_msg()``, but it is significantly
-  slower than ``fetch(100)``.
+☐  Make the JetStream consumers durable and test their speed.
 
-  4-5 secs for ``fetch(100)`` vs. 30-50 secs for ``get_msg()`` with a
-  sequence id.
+☐  Create a PoC for filtering tetragon audit logs and republishing them to the next stream.
 
-- Readable filters.
+☐  Add JetStream target/sink configuration?
 
-- Filter groupings..
+☐  The rest.. like readable filter rules, filter groups, filter examples.
 
-- Filter examples?
+☐  Redo PoC in Rust when speed is of the essence.
 
 
 -----------
@@ -40,3 +53,16 @@ Config file
     # Client certificate
     tls.cert_file = './nats_client.crt'
     tls.key_file = './nats_client.key'
+
+    [sink.my_gcloud]
+    gcloud.type = 'service_account'
+    gcloud.project_id = 'my-project-1234'
+    gcloud.private_key_id = '0123456789abcdef0123456789abcdef01234567'
+    gcloud.private_key = "-----BEGIN PRIVATE KEY-----\n...-----END PRIVATE KEY-----\n"
+    gcloud.client_email = '...@...iam.gserviceaccount.com'
+    gcloud.client_id = '12345'
+    gcloud.auth_uri = 'https://accounts.google.com/o/oauth2/auth'
+    gcloud.token_uri = 'https://oauth2.googleapis.com/token'
+    gcloud.auth_provider_x509_cert_url = 'https://www.googleapis.com/oauth2/v1/certs'
+    gcloud.client_x509_cert_url = 'https://www.googleapis.com/robot/v1/...'
+    gcloud.universe_domain = 'googleapis.com'

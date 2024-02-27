@@ -10,25 +10,22 @@ from nats.errors import ConnectionClosedError, TimeoutError
 from .jetstream import Producer
 
 
-async def purge_subject(producer):
-    """
-    Print contents and purge from stream.
-    """
-    await producer.connect()
+def test_connect(inputconfig):
+    async def main(p):
+        await p.connect()
+        await p.close()
 
-    i = 0
-    while True:
-        try:
-            product = await producer.next()
-        except TimeoutError:
-            print('Timeout (no more messages)')
-            await producer.close()
-            break
+    p = Producer(inputconfig)
+    asyncio.run(main(p))
 
-        print(i, product.payload)
-        await producer.delete(product)
 
-        i += 1
+def test_dev(inputconfig):
+    async def main(p):
+        # #await purge_subject(p)
+        await log_separate_test(p)
+
+    p = Producer(inputconfig)
+    asyncio.run(main(p))
 
 
 async def log_separate_test(producer):
@@ -67,7 +64,7 @@ async def log_separate_test(producer):
             # total wall time 37.27816319465637
             # total rusage ('utime', 13.668639, 'stime', 1.116393)
             # struct_rusage(ru_maxrss=43556, ru_minflt=8230, ru_majflt=0)
-            product = await producer.next_through_getmsg()
+            # #product = await producer.next_through_getmsg()
         except TimeoutError:
             print('Timeout (no more messages)')
             await producer.close()
@@ -150,9 +147,8 @@ async def log_separate_test(producer):
         i += 1
         if (i % 100_000) == 0:
             print(i)
-        if i == 50_000:
-            rusage(r0, t0)
-            break
+
+    rusage(r0, t0)
 
     try:
         await producer.close()
@@ -170,7 +166,22 @@ async def log_separate_test(producer):
         print()
 
 
-def test_input(inputconfig):
-    p = Producer(inputconfig)
-    # #asyncio.run(purge_subject(p))
-    asyncio.run(log_separate_test(p))
+async def purge_subject(producer):
+    """
+    Print contents and purge from stream.
+    """
+    await producer.connect()
+
+    i = 0
+    while True:
+        try:
+            product = await producer.next()
+        except TimeoutError:
+            print('Timeout (no more messages)')
+            await producer.close()
+            break
+
+        print(i, product.payload)
+        await producer.delete(product)
+
+        i += 1

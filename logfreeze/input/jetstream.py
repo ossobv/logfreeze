@@ -77,9 +77,16 @@ class Producer:
             subject=self.inputconfig.jetstream_subject,
             stream=self.inputconfig.jetstream_name)
 
+        # XXX: no possibility to configure the Consumer?
+        # See:
+        # https://docs.rs/async-nats/latest/async_nats/jetstream/consumer/struct.Config.html
+        # sub = await js.pull_subscribe(
+        #     durable='logfreeze',
+        #     subject='bulk.section.*')
+
         info = await sub.consumer_info()
         self._stream_name = info.stream_name
-        self._stream_name = self.inputconfig.jetstream_name
+        # #self._stream_name = self.inputconfig.jetstream_name
 
         print('INPUT', self.inputconfig.name, info)
         print()
@@ -93,11 +100,20 @@ class Producer:
         await self._natsc.flush()
         await self._natsc.close()
 
+    async def next_through_consumer(self, batch_size=10):
+        """
+        This one is fast (??? is it?) and it has NATS do bookkeeping of the
+        stream position.
+        """
+        raise NotImplementedError()
+
     async def next_through_fetch(self, batch_size=10):
         """
         This one is fast but it always starts the stream at 1.
         """
-        if not self._messages:
+        try:
+            msg = self._messages.pop(0)
+        except IndexError:
             try:
                 msgs = await self._sub.fetch(batch=batch_size, timeout=3)
             except TimeoutError as e:
@@ -105,8 +121,8 @@ class Producer:
             else:
                 assert 1 <= len(msgs) <= batch_size, (batch_size, msgs)
                 self._messages = msgs
+            msg = self._messages.pop(0)
 
-        msg = self._messages.pop(0)
         product = Product(
             payload=loads(msg.data),
             # Remote Sequence: this is also the ID used when deleting a remote
@@ -123,6 +139,9 @@ class Producer:
     async def next_through_getmsg(self):
         """
         This one is slow but it can start/resume the stream anywhere.
+
+        Unsure whether direct=False or True is better. It appears as though
+        direct=False is slightly faster.
         """
         try:
             msg = await self._jsmgr.get_msg(
@@ -134,7 +153,7 @@ class Producer:
                 # requests, but only if the nats server has:
                 # https://github.com/nats-io/nats-server/commit/ca4ddb62caf6eb6c0c4c5d6efd894bd9d1d4701e
                 # For direct=False, the batched requests are not supported.
-                direct=True,
+                direct=False,
                 next=True)      # give the next message >= seq
         except TimeoutError as e:
             raise TimeoutError from e

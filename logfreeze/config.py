@@ -6,6 +6,7 @@ except ImportError:
     import toml as tomllib
 
 from .input.config import InputConfig
+from .sink.config import SinkConfig
 
 
 class AppConfig(namedtuple('AppConfig', 'inputs filters sinks')):

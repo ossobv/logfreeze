@@ -8,3 +8,4 @@ nats-py
 # sink prereqs
 google-auth
 google-cloud
+google-cloud-storage
