@@ -100,6 +100,12 @@ class Producer:
         await self._natsc.flush()
         await self._natsc.close()
 
+        self._natsc = self._jsmgr = self._sub = self._next_seq = None
+
+    async def next(self):
+        # Fastest.. until we have a working next_through_consumer.
+        return await self.next_through_fetch(100)
+
     async def next_through_consumer(self, batch_size=10):
         """
         This one is fast (??? is it?) and it has NATS do bookkeeping of the

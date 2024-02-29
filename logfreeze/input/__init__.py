@@ -1,28 +1,52 @@
-import asyncio
-
 from json import dumps, loads
-from resource import RUSAGE_SELF, getrusage
-from time import time
+
+import asyncio
 
 # TODO: Wrap these into something generic?
 from nats.errors import ConnectionClosedError, TimeoutError
+
+from logfreeze.bench import measure_resources
 
 from .jetstream import Producer
 
 
 def test_connect(inputconfig):
-    async def main(p):
+    async def main(producer):
+        await producer.connect()
+        await producer.close()
+
+    p = Producer(inputconfig)
+    asyncio.run(main(p))
+
+
+def test_timings(inputconfig):
+    async def main(producer):
+        # next_through_fetch
         await p.connect()
-        await p.close()
+        with measure_resources('50.000 fetches with batch 100'):
+            for i in range(50000):
+                product = await producer.next_through_fetch(100)
+        await producer.close()
+        print(product)
+        print()
+
+        # next_through_getmsg
+        await p.connect()
+        with measure_resources('50.000 fetches with getmsg'):
+            for i in range(50000):
+                product = await producer.next_through_getmsg()
+        await producer.close()
+        print(product)
+        print()
 
     p = Producer(inputconfig)
     asyncio.run(main(p))
 
 
 def test_dev(inputconfig):
-    async def main(p):
-        # #await purge_subject(p)
-        await log_separate_test(p)
+    async def main(producer):
+        # #await example_purge_subject(producer)
+        await log_separate_test(producer)
 
     p = Producer(inputconfig)
     asyncio.run(main(p))
@@ -36,35 +60,10 @@ async def log_separate_test(producer):
 
     seen = {}
 
-    r0 = getrusage(RUSAGE_SELF)
-    t0 = time()
-
-    def rusage(r0, t0):
-        rnow = getrusage(RUSAGE_SELF)
-        tnow = time()
-
-        rdelta = (
-            'utime', rnow.ru_utime - r0.ru_utime,
-            'stime', rnow.ru_stime - r0.ru_stime)
-        tdelta = tnow - t0
-
-        print('total wall time', tdelta)
-        print('total rusage', rdelta)
-        print(rnow)
-
     i = 0
     while True:
         try:
-            # Test run over 50.000 records
-            # ----------------------------
-            # total wall time 4.591595411300659
-            # total rusage ('utime', 3.657911, 'stime', 0.136071)
-            # struct_rusage(ru_maxrss=45464, ru_minflt=9729, ru_majflt=0)
-            product = await producer.next_through_fetch(100)
-            # total wall time 37.27816319465637
-            # total rusage ('utime', 13.668639, 'stime', 1.116393)
-            # struct_rusage(ru_maxrss=43556, ru_minflt=8230, ru_majflt=0)
-            # #product = await producer.next_through_getmsg()
+            product = await producer.next()
         except TimeoutError:
             print('Timeout (no more messages)')
             await producer.close()
@@ -148,8 +147,6 @@ async def log_separate_test(producer):
         if (i % 100_000) == 0:
             print(i)
 
-    rusage(r0, t0)
-
     try:
         await producer.close()
     except ConnectionClosedError:
@@ -166,7 +163,7 @@ async def log_separate_test(producer):
         print()
 
 
-async def purge_subject(producer):
+async def example_purge_subject(producer):
     """
     Print contents and purge from stream.
     """
