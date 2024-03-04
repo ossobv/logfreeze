@@ -3,21 +3,14 @@ logfreeze
 
 *Function one:* **replicating a JetStream to remote storage (logfreeze).**
 
-For this, we will want a *durable ordered push consumer*:
-
-- *durable*, so we can stop and upload a batch, and then resume;
-
-- *ordered*, this greatly improves auditability -- proof that logs are not missing;
-
-- *push*, we subscribe to a specific subject (group).
-
 *Function two:* **filtering and distributing logs to designated JetStreams**
 
-For this, we could use horizontal scaling and we will use a *durable pull consumer*.
+For both cases we want a "pull consumer" because we'll always want to be
+able to run late. Never should messages be dropped just because we
+weren't there to listen.
 
-- *durable*, as the tasks will run forever;
-
-- *pull* (and unordered) as we might want to use multiple jobs and do not need 100% ordering.
+A durable (named) consumer provides such a thing. Hopefully it is
+ordered as well.
 
 
 ----

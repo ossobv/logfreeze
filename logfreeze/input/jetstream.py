@@ -5,7 +5,43 @@ from ssl import Purpose, create_default_context
 
 from nats import connect
 from nats.errors import TimeoutError
+from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 from nats.js.manager import JetStreamManager
+
+
+if 0:
+    def monkey_patch_nats_tcptransport_for_tracing():
+        from sys import stderr
+        from nats.aio.transport import TcpTransport as class_
+
+        def replace(cls, prop, func):
+            setattr(cls, f'orig_{prop}', getattr(cls, prop))
+            setattr(cls, prop, func)
+
+        def new_write(self, payload):
+            print('>>> (w)', payload, file=stderr)
+            return self.orig_write(payload)
+
+        def new_writelines(self, payload):
+            print('>>> (W)', payload, file=stderr)
+            return self.orig_writelines(payload)
+
+        async def new_read(self, *args, **kwargs):
+            ret = await self.orig_read(*args, **kwargs)
+            print('<<< (r)', ret, file=stderr)
+            return ret
+
+        async def new_readline(self, *args, **kwargs):
+            ret = await self.orig_readline(*args, **kwargs)
+            print('<<< (R)', ret, file=stderr)
+            return ret
+
+        replace(class_, 'write', new_write)
+        replace(class_, 'writelines', new_writelines)
+        replace(class_, 'read', new_read)
+        replace(class_, 'readline', new_readline)
+
+    monkey_patch_nats_tcptransport_for_tracing()
 
 
 class Product(namedtuple('Product', 'payload rseq timestamp')):
@@ -40,6 +76,11 @@ class Timeout(Exception):
 class Producer:
     def __init__(self, inputconfig):
         self.inputconfig = inputconfig
+        # FIXME: Come up with a better name for the durable consumer.
+        if 1:
+            self.durable_name = f'logfreeze_{inputconfig.name}'
+        else:
+            self.durable_name = None  # ephemeral
         self._natsc = None
         self._jsmgr = None
         self._sub = None
@@ -64,31 +105,57 @@ class Producer:
         assert not self._natsc, self._natsc
         natsc = await connect(
             servers=[self.inputconfig.jetstream_server],
-            tls=tls_ctx, tls_hostname=tls_hostname)
+            tls=tls_ctx, tls_hostname=tls_hostname,
+            name='logfreeze.input',  # FIXME: more naming..
+            verbose=False)
 
         jsmgr = JetStreamManager(natsc)
         stream_name = await jsmgr.find_stream_name_by_subject(
             self.inputconfig.jetstream_subject)
         assert stream_name == self.inputconfig.jetstream_name, (
             stream_name, 'but expected', self.inputconfig.jetstream_name)
-
         js = natsc.jetstream()
-        sub = await js.pull_subscribe(
-            subject=self.inputconfig.jetstream_subject,
-            stream=self.inputconfig.jetstream_name)
 
-        # XXX: no possibility to configure the Consumer?
-        # See:
-        # https://docs.rs/async-nats/latest/async_nats/jetstream/consumer/struct.Config.html
-        # sub = await js.pull_subscribe(
-        #     durable='logfreeze',
-        #     subject='bulk.section.*')
+        if self.durable_name:
+            # Setting deliver_subject to None will cause [the] consumer to be
+            # "pull-based", and will require explicit acknowledgment of each
+            # message. This is analogous in some ways to a normal NATS queue
+            # subscriber, where a message will be delivered to a single
+            # subscriber. Pull-based consumers are intended to be used for
+            # workloads where it is desirable to have a single process receive
+            # a message.
+            # https://docs.rs/async-nats/latest/async_nats/jetstream/consumer/struct.Config.html
+            assert '.' not in self.durable_name
+            assert '*' not in self.durable_name
+            assert '>' not in self.durable_name
+            config = ConsumerConfig(
+                durable_name=self.durable_name,
+                deliver_policy=DeliverPolicy.BY_START_SEQUENCE,
+                opt_start_seq=1,
+                ack_policy=AckPolicy.EXPLICIT)
+            info = await jsmgr.add_consumer(
+                stream=self.inputconfig.jetstream_name,
+                config=config)
+            sub = await js.pull_subscribe(
+                subject=self.inputconfig.jetstream_subject,
+                # queue= <-- if we wanted to split the load.. (horiz scale)
+                stream=self.inputconfig.jetstream_name,
+                durable=self.durable_name,
+                pending_bytes_limit=0,
+                pending_msgs_limit=0)
 
-        info = await sub.consumer_info()
+        else:
+            sub = await js.pull_subscribe(
+                subject=self.inputconfig.jetstream_subject,
+                stream=self.inputconfig.jetstream_name)
+            info = await sub.consumer_info()
+
         self._stream_name = info.stream_name
         # #self._stream_name = self.inputconfig.jetstream_name
 
         print('INPUT', self.inputconfig.name, info)
+        print()
+        print('SUB', sub)
         print()
 
         self._natsc = natsc
@@ -103,19 +170,12 @@ class Producer:
         self._natsc = self._jsmgr = self._sub = self._next_seq = None
 
     async def next(self):
-        # Fastest.. until we have a working next_through_consumer.
         return await self.next_through_fetch(100)
-
-    async def next_through_consumer(self, batch_size=10):
-        """
-        This one is fast (??? is it?) and it has NATS do bookkeeping of the
-        stream position.
-        """
-        raise NotImplementedError()
 
     async def next_through_fetch(self, batch_size=10):
         """
-        This one is fast but it always starts the stream at 1.
+        This one is fast: it starts the stream at 1 for ephemeral consumers,
+        but for durable ones, we start wherever we left off.
         """
         try:
             msg = self._messages.pop(0)
