@@ -33,6 +33,11 @@ class Consumer:
             verbose=False)
         js = natsc.jetstream()
 
+        # TODO: add stream options here..
+        await js.add_stream(
+            name=self.sinkconfig.jetstream.name,
+            subjects=[self.sinkconfig.jetstream.subject])
+
         self._natsc = natsc
         self._js = js
 
@@ -42,6 +47,6 @@ class Consumer:
 
         self._natsc = self._js = None
 
-    async def write(self, msg):
+    async def put(self, subject, data):
         ack = await self._js.publish(subject, data)
         del ack

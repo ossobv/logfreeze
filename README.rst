@@ -62,10 +62,11 @@ Config file
     [filter.tetragon-cat]
     condition = ['=', 'systemd_unit', 'tetragon-cat.service']
 
-    [[task]]
+    [task.my_task]
+    action = 'filterforward'
     input = 'src_jetstream'
-    sink = 'dst_jetstream'
     filters = ['tetragon-cat']
+    sink = 'dst_jetstream'
 
     [sink.my_gcloud]
     gcloud.type = 'service_account'

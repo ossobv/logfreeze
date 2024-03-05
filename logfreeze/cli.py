@@ -10,6 +10,10 @@ def main():
         '-c', '--config', required=True, help='toml config filename')
     subparser = parser.add_subparsers(dest='command', required=True)
 
+    runtasks = subparser.add_parser(
+        'runtask', help='run a task')
+    runtasks.add_argument('task', help='name of the task')
+
     test_input_connect = subparser.add_parser(
         'test-input-connect', help='test connecting to input')
     test_input_connect.add_argument('input', help='name of the input')
@@ -32,7 +36,9 @@ def main():
     print(appconfig)
     print()
 
-    if args.command == 'test-input-connect':
+    if args.command == 'runtask':
+        action.runtask(appconfig, args.task)
+    elif args.command == 'test-input-connect':
         action.test_input_connect(appconfig, args.input)
     elif args.command == 'test-input-dev':
         action.test_input_dev(appconfig, args.input)
