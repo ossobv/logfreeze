@@ -5,11 +5,12 @@ try:
 except ImportError:
     import toml as tomllib
 
+from .filter.config import FilterConfig
 from .input.config import InputConfig
 from .sink.config import SinkConfig
 
 
-class AppConfig(namedtuple('AppConfig', 'inputs filters sinks')):
+class AppConfig(namedtuple('AppConfig', 'inputs filters sinks tasks')):
     @classmethod
     def from_filename(cls, filename):
         with open(filename, 'r') as fp:
@@ -27,9 +28,17 @@ class AppConfig(namedtuple('AppConfig', 'inputs filters sinks')):
         for sink_name, sink_data in data.pop('sink', {}).items():
             sinks.append(SinkConfig.from_data(sink_name, sink_data))
 
+        # FIXME: this is new..
+        if 'task' in data:
+            # FIXME: one input, one sink, one or more filters..
+            tasks = data.pop('task')
+        else:
+            tasks = None
+
         assert not data, ('leftover data', data)
 
         return cls(
             inputs=inputs,
             filters=filters,
-            sinks=sinks)
+            sinks=sinks,
+            tasks=tasks)

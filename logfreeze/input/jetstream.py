@@ -69,10 +69,6 @@ class Product(namedtuple('Product', 'payload rseq timestamp')):
         return super().__new__(cls, *args, **kwargs)
 
 
-class Timeout(Exception):
-    pass
-
-
 class Producer:
     def __init__(self, inputconfig):
         self.inputconfig = inputconfig
@@ -104,16 +100,16 @@ class Producer:
 
         assert not self._natsc, self._natsc
         natsc = await connect(
-            servers=[self.inputconfig.jetstream_server],
+            servers=[self.inputconfig.jetstream.server],
             tls=tls_ctx, tls_hostname=tls_hostname,
             name='logfreeze.input',  # FIXME: more naming..
             verbose=False)
 
         jsmgr = JetStreamManager(natsc)
         stream_name = await jsmgr.find_stream_name_by_subject(
-            self.inputconfig.jetstream_subject)
-        assert stream_name == self.inputconfig.jetstream_name, (
-            stream_name, 'but expected', self.inputconfig.jetstream_name)
+            self.inputconfig.jetstream.subject)
+        assert stream_name == self.inputconfig.jetstream.name, (
+            stream_name, 'but expected', self.inputconfig.jetstream.name)
         js = natsc.jetstream()
 
         if self.durable_name:
@@ -134,24 +130,24 @@ class Producer:
                 opt_start_seq=1,
                 ack_policy=AckPolicy.EXPLICIT)
             info = await jsmgr.add_consumer(
-                stream=self.inputconfig.jetstream_name,
+                stream=self.inputconfig.jetstream.name,
                 config=config)
             sub = await js.pull_subscribe(
-                subject=self.inputconfig.jetstream_subject,
+                subject=self.inputconfig.jetstream.subject,
                 # queue= <-- if we wanted to split the load.. (horiz scale)
-                stream=self.inputconfig.jetstream_name,
+                stream=self.inputconfig.jetstream.name,
                 durable=self.durable_name,
                 pending_bytes_limit=0,
                 pending_msgs_limit=0)
 
         else:
             sub = await js.pull_subscribe(
-                subject=self.inputconfig.jetstream_subject,
-                stream=self.inputconfig.jetstream_name)
+                subject=self.inputconfig.jetstream.subject,
+                stream=self.inputconfig.jetstream.name)
             info = await sub.consumer_info()
 
         self._stream_name = info.stream_name
-        # #self._stream_name = self.inputconfig.jetstream_name
+        # #self._stream_name = self.inputconfig.jetstream.name
 
         print('INPUT', self.inputconfig.name, info)
         print()
@@ -213,7 +209,7 @@ class Producer:
             msg = await self._jsmgr.get_msg(
                 stream_name=self._stream_name,
                 seq=self._next_seq,
-                subject=self.inputconfig.jetstream_subject,
+                subject=self.inputconfig.jetstream.subject,
                 # Allow from replica can only be True if --allow-direct is
                 # enabled on the stream. When it is, we could get batched
                 # requests, but only if the nats server has:

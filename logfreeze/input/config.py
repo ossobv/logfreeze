@@ -4,14 +4,13 @@ from ..tlsconfig import TlsConfig
 
 
 class InputConfig(namedtuple('InputConfig', (
-        'name jetstream_server jetstream_name jetstream_subject tls'))):
+        'name jetstream tls'))):
 
     @classmethod
     def from_data(cls, name, data):
         jetstream = data.pop('jetstream')
-        jetstream_server = jetstream.pop('server')
-        jetstream_name = jetstream.pop('name')  # not necessary??
-        jetstream_subject = jetstream.pop('subject')
+        if jetstream:
+            jetstream = _JetStreamConfig.from_data(jetstream)
 
         tls = data.pop('tls', None)
         if tls:
@@ -21,7 +20,12 @@ class InputConfig(namedtuple('InputConfig', (
 
         return cls(
             name=name,
-            jetstream_server=jetstream_server,
-            jetstream_name=jetstream_name,
-            jetstream_subject=jetstream_subject,
+            jetstream=jetstream,
             tls=tls)
+
+
+class _JetStreamConfig(namedtuple('JetStreamConfig', (
+        'server name subject'))):
+    @classmethod
+    def from_data(cls, data):
+        return cls(**data)

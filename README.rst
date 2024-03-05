@@ -34,10 +34,10 @@ Config file
 
 .. code-block:: toml
 
-    [input.my_jetstream]
+    [input.src_jetstream]
     # Input source
     jetstream.server = 'nats://10.20.30.40:4222'
-    jetstream.name = 'my_stream'
+    jetstream.name = 'source_stream'
     #jetstream.subject = 'bulk.section.abc'
     jetstream.subject = 'bulk.section.def'
     # Server certificate validation
@@ -46,6 +46,26 @@ Config file
     # Client certificate
     tls.cert_file = './nats_client.crt'
     tls.key_file = './nats_client.key'
+
+    [sink.dst_jetstream]
+    # Input source
+    jetstream.server = 'nats://10.20.30.40:4222'
+    jetstream.name = 'target_stream'
+    jetstream.subject = 'target.{filter}'
+    # Server certificate validation
+    #tls.server_name = 'server_name_for_cert_validation'
+    tls.ca_file = './nats_ca.crt'
+    # Client certificate
+    tls.cert_file = './nats_client.crt'
+    tls.key_file = './nats_client.key'
+
+    [filter.tetragon-cat]
+    condition = ['=', 'systemd_unit', 'tetragon-cat.service']
+
+    [[task]]
+    input = 'src_jetstream'
+    sink = 'dst_jetstream'
+    filters = ['tetragon-cat']
 
     [sink.my_gcloud]
     gcloud.type = 'service_account'
